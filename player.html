@@ -1,0 +1,1159 @@
+<!DOCTYPE html>
+<html lang="ca">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>JOC - Xifres Concurs</title>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <!-- Config -->
+    <script src="firebase_config.js"></script>
+    <!-- Tailwind -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Ocultar scrollbars globalment però permetre funcionalitat */
+        html,
+        body {
+            overflow: hidden;
+            /* Assegura que no hi hagi scroll al fons */
+            height: 100%;
+            width: 100%;
+        }
+
+        * {
+            scrollbar-width: none;
+            /* Firefox */
+            -ms-overflow-style: none;
+            /* IE and Edge */
+        }
+
+        *::-webkit-scrollbar {
+            display: none;
+            /* Chrome, Safari, Opera */
+        }
+
+        /* Animacions i estils extra */
+        .number-tile {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            user-select: none;
+            touch-action: none;
+        }
+
+        .number-tile:active {
+            transform: scale(0.95);
+        }
+
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .drag-over {
+            transform: scale(1.1);
+            box-shadow: 0 0 0 4px #fbbf24;
+            z-index: 10;
+        }
+
+        /* Modal backdrop */
+        #modal-overlay {
+            background-color: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(4px);
+        }
+
+        /* Barra de progrés */
+        .progress-bar {
+            transition: width 1s linear;
+        }
+
+        /* Tecla hint */
+        .key-hint {
+            position: absolute;
+            top: 2px;
+            right: 4px;
+            font-size: 10px;
+            color: #94a3b8;
+            font-weight: bold;
+        }
+
+        /* Estil per les targetes de solució */
+        .eq-card {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #1e293b;
+            color: #e2e8f0;
+            border-radius: 6px;
+            padding: 8px 12px;
+            margin-bottom: 6px;
+            border-left: 4px solid #ef4444;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            font-family: monospace;
+            font-size: 1rem;
+        }
+
+        .eq-result {
+            font-weight: bold;
+            color: #fca5a5;
+        }
+
+        /* Classe per a elements deshabilitats visualment */
+        .game-disabled {
+            opacity: 0.5;
+            pointer-events: none;
+            filter: grayscale(0.8);
+        }
+
+        /* Graella de fitxes fixa */
+        .tiles-row {
+            min-height: 6rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem;
+            background-color: rgba(30, 41, 59, 0.3);
+            border-radius: 0.75rem;
+            margin-bottom: 0.5rem;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-900 font-sans text-slate-100 h-screen w-screen flex flex-col">
+
+    <!-- LOGIN SCREEN -->
+    <div id="login-screen"
+        class="absolute inset-0 z-[60] bg-slate-900 flex flex-col items-center justify-center p-6 transition-transform duration-500">
+        <div class="max-w-md w-full bg-slate-800 p-8 rounded-2xl shadow-2xl border border-slate-700">
+            <h1 class="text-3xl font-black text-center text-white mb-6">XIFRES <span class="text-red-500">CONCURS</span>
+            </h1>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-1">El teu Nom</label>
+                    <input type="text" id="input-name"
+                        class="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-3 text-white text-lg focus:ring-2 focus:ring-red-500 outline-none placeholder-slate-600 mb-2"
+                        placeholder="Ex: Maria" maxlength="12">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-1">PIN de la Sala</label>
+                    <input type="tel" id="input-pin"
+                        class="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-3 text-white text-lg focus:ring-2 focus:ring-red-500 outline-none placeholder-slate-600 font-mono tracking-widest text-center"
+                        placeholder="0000" maxlength="4">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Avatar</label>
+                    <div class="grid grid-cols-5 gap-2" id="avatar-grid">
+                        <button
+                            class="avatar-btn text-2xl p-2 rounded bg-slate-700 hover:bg-slate-600 transition-colors"
+                            onclick="selectAvatar('🦁')">🦁</button>
+                        <button
+                            class="avatar-btn text-2xl p-2 rounded bg-slate-700 hover:bg-slate-600 transition-colors"
+                            onclick="selectAvatar('🐯')">🐯</button>
+                        <button
+                            class="avatar-btn text-2xl p-2 rounded bg-slate-700 hover:bg-slate-600 transition-colors"
+                            onclick="selectAvatar('🐧')">🐧</button>
+                        <button
+                            class="avatar-btn text-2xl p-2 rounded bg-slate-700 hover:bg-slate-600 transition-colors"
+                            onclick="selectAvatar('👽')">👽</button>
+                        <button
+                            class="avatar-btn text-2xl p-2 rounded bg-slate-700 hover:bg-slate-600 transition-colors"
+                            onclick="selectAvatar('🤖')">🤖</button>
+                        <button
+                            class="avatar-btn text-2xl p-2 rounded bg-slate-700 hover:bg-slate-600 transition-colors"
+                            onclick="selectAvatar('🦊')">🦊</button>
+                        <button
+                            class="avatar-btn text-2xl p-2 rounded bg-slate-700 hover:bg-slate-600 transition-colors"
+                            onclick="selectAvatar('🦄')">🦄</button>
+                        <button
+                            class="avatar-btn text-2xl p-2 rounded bg-slate-700 hover:bg-slate-600 transition-colors"
+                            onclick="selectAvatar('🧠')">🧠</button>
+                        <button
+                            class="avatar-btn text-2xl p-2 rounded bg-slate-700 hover:bg-slate-600 transition-colors"
+                            onclick="selectAvatar('⚡')">⚡</button>
+                        <button
+                            class="avatar-btn text-2xl p-2 rounded bg-slate-700 hover:bg-slate-600 transition-colors"
+                            onclick="selectAvatar('🎓')">🎓</button>
+                    </div>
+                    <input type="hidden" id="input-avatar" value="🦁">
+                </div>
+
+                <div id="team-selection" class="hidden animate-in slide-in-from-top-2">
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Tria Equip</label>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button id="btn-team-1" onclick="selectTeam('1')"
+                            class="p-3 rounded-xl border-2 border-slate-700 bg-slate-900 font-bold text-xs uppercase hover:border-blue-500 transition-all">Equip
+                            A</button>
+                        <button id="btn-team-2" onclick="selectTeam('2')"
+                            class="p-3 rounded-xl border-2 border-slate-700 bg-slate-900 font-bold text-xs uppercase hover:border-red-500 transition-all">Equip
+                            B</button>
+                    </div>
+                    <input type="hidden" id="input-team" value="">
+                </div>
+
+                <button onclick="login()"
+                    class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-4 rounded-xl shadow-lg mt-4 transition-transform active:scale-95">
+                    ENTRAR A LA SALA
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- WAIT SCREEN (Surt quan no hi ha partida activa) -->
+    <div id="wait-screen"
+        class="absolute inset-0 z-50 bg-slate-950 flex flex-col items-center justify-center p-4 hidden">
+        <div class="mb-8 relative user-select-none select-none">
+            <div
+                class="w-48 h-48 rounded-full bg-slate-800 border-4 border-red-500 flex items-center justify-center shadow-[0_0_40px_rgba(239,68,68,0.3)] animate-pulse">
+                <span class="text-9xl transform hover:scale-110 transition-transform duration-300 cursor-default block"
+                    id="wait-avatar">⏳</span>
+            </div>
+            <!-- Decorative ring -->
+            <div class="absolute -inset-4 border-2 border-red-500/20 rounded-full animate-[spin_10s_linear_infinite]">
+            </div>
+        </div>
+        <h1 class="text-3xl font-bold text-white mb-2 text-center" id="wait-title">Esperant a generar una nova partida
+        </h1>
+        <p class="text-slate-400 text-center">Hola <span id="wait-name" class="text-white font-bold">Jugador</span>!
+            Estigues atent.</p>
+        <div id="connection-status" class="mt-8 text-xs text-green-500 font-mono">Connectat al servidor</div>
+    </div>
+
+    <!-- PENDING APPROVAL SCREEN -->
+    <div id="approval-screen"
+        class="absolute inset-0 z-50 bg-slate-950 flex flex-col items-center justify-center p-6 hidden">
+
+        <div class="mb-8 relative user-select-none select-none">
+            <div
+                class="w-48 h-48 rounded-full bg-slate-800 border-4 border-red-500 flex items-center justify-center shadow-[0_0_40px_rgba(239,68,68,0.3)] animate-pulse">
+                <span class="text-9xl transform hover:scale-110 transition-transform duration-300 cursor-default block"
+                    id="approval-avatar-display">🦁</span>
+            </div>
+            <!-- Decorative ring -->
+            <div class="absolute -inset-4 border-2 border-red-500/20 rounded-full animate-[spin_10s_linear_infinite]">
+            </div>
+        </div>
+
+        <h1 class="text-2xl font-bold text-white mb-2 text-center">Esperant ser acceptat...</h1>
+        <p class="text-slate-400 text-center max-w-xs">Hola <span id="approval-name"
+                class="text-white font-bold">...</span>, el presentador/a ha d'acceptar la teva sol·licitud.</p>
+        <div
+            class="mt-8 px-4 py-2 bg-slate-900 rounded-full border border-slate-700 text-xs text-slate-500 font-mono animate-pulse">
+            Connectant amb la sala...
+        </div>
+    </div>
+
+    <!-- SPECTATOR SCREEN (For Team Battle spectators) -->
+    <div id="spectator-screen"
+        class="absolute inset-0 z-50 bg-slate-950 flex flex-col items-center justify-center p-6 hidden">
+        <div class="mb-8 relative user-select-none select-none">
+            <div id="spectator-team-color"
+                class="w-48 h-48 rounded-full bg-slate-800 border-4 border-slate-500 flex items-center justify-center shadow-lg">
+                <span class="text-8xl">📺</span>
+            </div>
+        </div>
+        <h1 class="text-3xl font-bold text-white mb-2 text-center uppercase tracking-tighter">ÉS EL TORN DEL TEU EQUIP!
+        </h1>
+        <p class="text-slate-400 text-center mb-1">Estàs com a espectador de:</p>
+        <span id="spectator-team-name" class="text-2xl font-black uppercase tracking-widest">NOM EQUIP</span>
+        <div
+            class="mt-12 px-6 py-3 bg-slate-900 rounded-2xl border border-slate-800 text-sm text-slate-500 font-bold uppercase tracking-widest animate-pulse">
+            Espera al proper duel
+        </div>
+    </div>
+
+    <!-- MAIN GAME UI (Initially hidden, only shown during JUGANT phase) -->
+    <div id="game-ui" class="hidden flex flex-col h-full w-full overflow-hidden">
+
+        <!-- HEADER -->
+        <header class="bg-slate-950 text-white p-2 sm:p-3 shadow-lg z-20 shrink-0 border-b border-slate-800">
+            <div class="max-w-6xl mx-auto flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                            class="text-red-500">
+                            <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+                            <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+                            <path d="M4 22h16" />
+                            <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+                            <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+                            <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+                        </svg>
+                        <h1 class="text-lg md:text-xl font-black tracking-tight leading-none">XIFRES <span
+                                class="text-red-600">CONCURS</span></h1>
+                    </div>
+                </div>
+
+                <div class="flex gap-2 text-xs font-mono text-slate-400">
+                    <span id="player-id-display">Jugador</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Timer Bar -->
+        <div id="timer-container" class="w-full bg-slate-800 h-1.5 relative shrink-0">
+            <div id="timer-bar" class="h-full bg-red-600 progress-bar w-full shadow-[0_0_10px_rgba(220,38,38,0.7)]">
+            </div>
+        </div>
+
+        <div id="game-screen-content" class="flex-1 flex flex-col overflow-hidden">
+            <main
+                class="flex-1 w-full max-w-6xl mx-auto p-1 sm:p-2 lg:p-4 gap-2 lg:gap-4 flex flex-col lg:flex-row overflow-hidden min-h-0">
+
+                <!-- COLUMN 1: INFORMATION (TARGET + HISTORY) -->
+                <div id="info-panel" class="lg:w-72 flex flex-col gap-2 shrink-0 order-1 lg:order-2">
+
+                    <!-- TARGET AREA -->
+                    <div class="bg-slate-800/80 rounded-xl p-3 border border-slate-700 shadow-lg text-center shrink-0">
+                        <div class="text-slate-400 text-[10px] sm:text-xs font-semibold uppercase tracking-wider mb-1">
+                            Objectiu
+                        </div>
+                        <div
+                            class="bg-black border border-slate-700 text-red-500 text-5xl sm:text-6xl lg:text-7xl font-black px-4 py-2 rounded-lg shadow-inner tracking-tighter tabular-nums relative overflow-hidden">
+                            <span id="target-number" class="drop-shadow-[0_0_10px_rgba(239,68,68,0.5)]">000</span>
+                            <div
+                                class="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/5 to-transparent pointer-events-none">
+                            </div>
+                        </div>
+                        <div id="countdown-text-player"
+                            class="mt-3 text-3xl font-black text-red-500 tabular-nums font-mono border-2 border-red-500/50 rounded-xl px-4 py-1 bg-red-500/10 shadow-[0_0_20px_rgba(239,68,68,0.1)] inline-block">
+                            --s
+                        </div>
+                        <div id="status-message"
+                            class="mt-2 px-3 py-1 rounded-full font-bold text-xs bg-slate-900 text-slate-400 border border-slate-700 inline-flex items-center gap-2">
+                            Preparat
+                        </div>
+                    </div>
+
+                    <!-- HISTORY AREA -->
+                    <div
+                        class="bg-slate-800 rounded-xl shadow-sm border border-slate-700 flex flex-col flex-1 overflow-hidden min-h-[150px] lg:min-h-0 lg:max-h-[300px]">
+                        <div
+                            class="p-2 border-b border-slate-700 bg-slate-900 flex justify-between items-center shrink-0">
+                            <h3 class="text-slate-400 text-xs font-bold uppercase tracking-wider">Historial</h3>
+                        </div>
+                        <div id="history-list" class="flex-1 overflow-y-auto p-2 space-y-1 bg-slate-800/50">
+                            <p class="text-slate-600 italic text-xs text-center py-4">Fes operacions.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- COLUMN 2: GAME BOARD -->
+                <div id="game-panel"
+                    class="flex-1 flex flex-col gap-1 sm:gap-2 h-full overflow-hidden relative min-h-0 order-2 lg:order-1">
+
+                    <!-- BOARD AREA WRAPPER -->
+                    <div id="game-board-area" class="flex flex-col flex-1 overflow-y-auto min-h-0 relative gap-2 py-2">
+
+                        <!-- Overlay Game Over -->
+                        <div id="game-over-overlay"
+                            class="hidden absolute inset-0 bg-black/80 backdrop-blur-sm z-30 flex flex-col items-center justify-center animate-in fade-in rounded-xl">
+                            <div class="text-4xl mb-2 text-red-500">⏳</div>
+                            <h2 class="text-xl sm:text-2xl font-bold text-white mb-2">Temps Esgotat</h2>
+                            <p class="text-slate-400">Esperant resultats...</p>
+                        </div>
+
+                        <!-- Overlay SENT -->
+                        <div id="sent-overlay"
+                            class="hidden absolute inset-0 bg-green-900/90 backdrop-blur-sm z-30 flex flex-col items-center justify-center animate-in fade-in rounded-xl">
+                            <div class="text-6xl mb-4 animate-bounce">🚀</div>
+                            <h2 class="text-3xl font-bold text-white mb-2">ENVIAT!</h2>
+                            <p class="text-green-200">La teva solució s'ha registrat.</p>
+                            <p class="text-sm text-green-300 mt-4">Esperant que acabi el temps...</p>
+                        </div>
+
+                        <!-- DOUBLE ROW LAYOUT -->
+                        <div class="flex flex-col gap-4 justify-center w-full max-w-4xl mx-auto px-2">
+
+                            <!-- Fila 1: Números Inicials (CENTRATS) -->
+                            <div>
+                                <div class="text-[10px] text-slate-500 font-bold uppercase ml-1 mb-1">Inici</div>
+                                <div id="initial-numbers-grid" class="tiles-row justify-center">
+                                    <!-- Fitxes inicials -->
+                                </div>
+                            </div>
+
+                            <!-- Fila 2: Resultats Generats (A L'ESQUERRA) -->
+                            <div>
+                                <div class="text-[10px] text-red-400/70 font-bold uppercase ml-1 mb-1">Resultats</div>
+                                <div id="generated-numbers-grid"
+                                    class="tiles-row justify-start border-red-900/20 bg-red-900/5">
+                                    <!-- Fitxes generades -->
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <!-- CONTROLS -->
+                        <div
+                            class="mt-auto bg-slate-800/50 p-2 sm:p-4 rounded-xl shadow-inner border border-slate-700 flex flex-col items-center gap-2 mx-auto w-full max-w-lg shrink-0 backdrop-blur-sm">
+                            <div class="flex gap-2 sm:gap-4 justify-center w-full" id="op-buttons">
+                                <button onclick="selectOp('+')" data-key="+"
+                                    class="op-btn w-12 h-12 sm:w-14 sm:h-14 rounded-lg text-2xl font-bold flex items-center justify-center bg-slate-700 text-slate-300 hover:bg-slate-600 border border-slate-600 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                                    disabled>+</button>
+                                <button onclick="selectOp('-')" data-key="-"
+                                    class="op-btn w-12 h-12 sm:w-14 sm:h-14 rounded-lg text-2xl font-bold flex items-center justify-center bg-slate-700 text-slate-300 hover:bg-slate-600 border border-slate-600 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                                    disabled>-</button>
+                                <button onclick="selectOp('*')" data-key="*"
+                                    class="op-btn w-12 h-12 sm:w-14 sm:h-14 rounded-lg text-2xl font-bold flex items-center justify-center bg-slate-700 text-slate-300 hover:bg-slate-600 border border-slate-600 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                                    disabled>×</button>
+                                <button onclick="selectOp('/')" data-key="/"
+                                    class="op-btn w-12 h-12 sm:w-14 sm:h-14 rounded-lg text-2xl font-bold flex items-center justify-center bg-slate-700 text-slate-300 hover:bg-slate-600 border border-slate-600 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                                    disabled>÷</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ACTION BUTTONS -->
+                    <div class="flex gap-3 justify-center shrink-0 mt-auto pt-1 pb-2">
+                        <button onclick="undo()" id="btn-undo"
+                            class="px-3 py-2 rounded-lg font-bold text-slate-400 hover:bg-slate-700 hover:text-white flex items-center gap-1.5 text-sm disabled:opacity-30 transition-colors"
+                            disabled>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round">
+                                <path d="M9 14 4 9l5-5" />
+                                <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11" />
+                            </svg>
+                            Desfer
+                        </button>
+                        <div class="w-px bg-slate-700 mx-1"></div>
+                        <!-- BOTÓ ENVIAR -->
+                        <button onclick="confirmResult()" id="btn-submit"
+                            class="px-6 py-2 rounded-lg font-bold bg-green-600 hover:bg-green-500 text-white shadow-[0_0_15px_rgba(34,197,94,0.4)] flex items-center gap-1.5 text-sm transition-transform active:scale-95 border border-green-500 z-40">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round">
+                                <line x1="22" y1="2" x2="11" y2="13"></line>
+                                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                            </svg>
+                            ENVIAR
+                        </button>
+                    </div>
+                </div>
+
+            </main>
+        </div>
+    </div>
+
+    <!-- CONFIRMATION MODAL -->
+    <div id="confirmation-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeConfirmation()"></div>
+        <div
+            class="bg-slate-800 border border-slate-600 rounded-2xl shadow-2xl p-6 w-full max-w-sm relative z-10 m-4 transform transition-all animate-in fade-in zoom-in-95">
+            <h3 class="text-xl font-bold text-white mb-2 text-center">Enviar Solució?</h3>
+            <p class="text-slate-300 text-center mb-6 text-sm">Estàs segur que vols enviar:</p>
+
+            <div class="flex justify-center mb-8">
+                <div class="text-5xl font-black text-white bg-green-600 px-6 py-3 rounded-xl shadow-lg border border-green-400"
+                    id="confirm-value-display">
+                    0
+                </div>
+            </div>
+
+            <div class="flex gap-3">
+                <button onclick="closeConfirmation()"
+                    class="flex-1 px-4 py-3 rounded-xl font-bold text-slate-300 bg-slate-700 hover:bg-slate-600 transition-colors">
+                    Seguir calculant
+                </button>
+                <button onclick="sendToFirebase()"
+                    class="flex-1 px-4 py-3 rounded-xl font-bold text-white bg-green-600 hover:bg-green-500 shadow-lg shadow-green-900/20 transition-colors">
+                    SÍ, ENVIAR
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        // --- AUDIO SYSTEM (Portat de l'original) ---
+        var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        var soundEnabled = true;
+
+        function playTone(freq, type = 'sine', duration = 0.1) {
+            if (!soundEnabled) return;
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
+            var osc = audioCtx.createOscillator();
+            var gain = audioCtx.createGain();
+
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+
+            gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        function playSound(type) {
+            switch (type) {
+                case 'click': playTone(800, 'sine', 0.05); break;
+                case 'start':
+                    playTone(440, 'sine', 0.1); setTimeout(() => playTone(880, 'square', 0.4), 100);
+                    break;
+                case 'tick': playTone(800, 'square', 0.05); break;
+                case 'end':
+                    [100, 80, 60].forEach((f, i) => setTimeout(() => playTone(f, 'sawtooth', 0.4), i * 300));
+                    break;
+                case 'victory':
+                    [440, 554, 659, 880].forEach((f, i) => setTimeout(() => playTone(f, 'square', 0.15), i * 100));
+                    break;
+            }
+        }
+
+        // --- IDENTIFICADOR DEL JUGADOR & LOGIN ---
+        var playerData = { name: '', avatar: '🦁', id: '', equip: '' };
+        var gameConfig = { mode: 'lliure' };
+
+        // Escolta la config per saber si demanar equip
+        database.ref('config').on('value', function (snap) {
+            var val = snap.val();
+            if (val) {
+                gameConfig = val;
+                var teamSel = document.getElementById('team-selection');
+                if (teamSel) {
+                    teamSel.classList.toggle('hidden', gameConfig.mode !== 'batalla');
+                    if (gameConfig.mode === 'batalla') {
+                        var b1 = document.getElementById('btn-team-1');
+                        var b2 = document.getElementById('btn-team-2');
+                        if (b1 && gameConfig.team1) b1.innerText = gameConfig.team1.name;
+                        if (b2 && gameConfig.team2) b2.innerText = gameConfig.team2.name;
+                    }
+                }
+            }
+        });
+
+        function selectTeam(t) {
+            playerData.equip = t;
+            document.getElementById('input-team').value = t;
+            document.getElementById('btn-team-1').classList.toggle('border-blue-500', t === '1');
+            document.getElementById('btn-team-1').classList.toggle('bg-blue-900/40', t === '1');
+            document.getElementById('btn-team-2').classList.toggle('border-red-500', t === '2');
+            document.getElementById('btn-team-2').classList.toggle('bg-red-900/40', t === '2');
+            playSound('click');
+        }
+
+        // Comprovem si ja tenim dades
+        var storedPlayer = localStorage.getItem('xifres_player_data');
+        if (storedPlayer) {
+            var stored = JSON.parse(storedPlayer);
+            playerData.name = stored.name;
+            playerData.avatar = stored.avatar;
+            playerData.id = stored.id;
+            document.getElementById('input-name').value = playerData.name;
+            document.getElementById('input-avatar').value = playerData.avatar;
+        }
+
+        if (!playerData.id) {
+            playerData.id = 'user_' + Date.now() + Math.floor(Math.random() * 1000);
+        }
+
+        function selectAvatar(av) {
+            var avatars = document.querySelectorAll('.avatar-btn');
+            for (var i = 0; i < avatars.length; i++) {
+                avatars[i].classList.remove('bg-red-600', 'text-white', 'ring-2', 'ring-red-500', 'ring-offset-2', 'ring-offset-slate-800', 'scale-110', 'z-10');
+            }
+            var btn = null;
+            for (var j = 0; j < avatars.length; j++) {
+                if (avatars[j].innerText === av) {
+                    btn = avatars[j];
+                    break;
+                }
+            }
+            if (btn) {
+                btn.classList.add('bg-red-600', 'text-white', 'ring-2', 'ring-red-500', 'ring-offset-2', 'ring-offset-slate-800', 'scale-110', 'z-10');
+            }
+            document.getElementById('input-avatar').value = av;
+            playSound('click');
+        }
+
+        window.addEventListener('DOMContentLoaded', function () {
+            var stored = localStorage.getItem('xifres_player_data');
+            var initialAvatar = stored ? JSON.parse(stored).avatar : '🦁';
+            selectAvatar(initialAvatar);
+        });
+
+        function login() {
+            var name = document.getElementById('input-name').value.trim();
+            var avatar = document.getElementById('input-avatar').value;
+            var pin = document.getElementById('input-pin').value.trim();
+            var equip = document.getElementById('input-team').value;
+
+            if (!name) return alert("Posa un nom!");
+            if (!pin) return alert("Necessites el PIN de la sala!");
+            if (gameConfig.mode === 'batalla' && !equip) return alert("Has de triar un equip!");
+
+            database.ref('pin').once('value').then(function (snap) {
+                var serverPin = snap.val();
+                if (!serverPin) return alert("NO HI HA CAP PARTIDA ACTIVA.");
+                if (parseInt(pin) !== serverPin) return alert("PIN INCORRECTE!");
+
+                playerData.name = name;
+                playerData.avatar = avatar;
+                playerData.equip = equip;
+                localStorage.setItem('xifres_player_data', JSON.stringify(playerData));
+
+                database.ref('solicituds/' + playerData.id).set({
+                    nom: name,
+                    avatar: avatar,
+                    equip: equip,
+                    timestamp: Date.now()
+                });
+
+                document.getElementById('login-screen').classList.add('-translate-y-full');
+                document.getElementById('approval-screen').classList.remove('hidden');
+                document.getElementById('approval-name').textContent = name;
+                document.getElementById('approval-avatar-display').textContent = avatar;
+
+                startApprovalListener(playerData.id);
+                startResponseSync(playerData.id);
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+            });
+        }
+
+        function startResponseSync(uid) {
+            database.ref('respostes/' + uid).on('value', function (snap) {
+                if (snap.exists()) {
+                    isSolved = true;
+                    const sentOverlay = document.getElementById('sent-overlay');
+                    if (sentOverlay) sentOverlay.classList.remove('hidden');
+                    render();
+                } else {
+                    // Si l'admin esborra les respostes (nova ronda), tornem a permetre enviar
+                    isSolved = false;
+                    const sentOverlay = document.getElementById('sent-overlay');
+                    if (sentOverlay) sentOverlay.classList.add('hidden');
+                    render();
+                }
+            });
+        }
+
+        function startApprovalListener(uid) {
+            database.ref('jugadors/' + uid).on('value', function (snap) {
+                var val = snap.val();
+                if (val) {
+                    playerData.equip = val.equip; // Sincronitzem equip acceptat
+                    document.getElementById('approval-screen').classList.add('hidden');
+                    document.getElementById('player-id-display').innerText = playerData.avatar + " " + playerData.name;
+                    document.getElementById('wait-name').innerText = playerData.name;
+                    document.getElementById('wait-avatar').innerText = playerData.avatar;
+                    playSound('victory');
+
+                    // Forçar check de pantalla immediat una vegada acceptat
+                    database.ref('partida').once('value', function (s) {
+                        handlePartidaUpdate(s.val());
+                    });
+                }
+            });
+
+            database.ref('solicituds/' + uid).on('value', function (snap) {
+                if (!snap.exists()) {
+                    setTimeout(function () {
+                        database.ref('jugadors/' + uid).once('value').then(function (jSnap) {
+                            if (!jSnap.exists() && !document.getElementById('approval-screen').classList.contains('hidden')) {
+                                alert("Sol·licitud Rebutjada.");
+                                location.reload();
+                            }
+                        });
+                    }, 500);
+                }
+            });
+        }
+
+        // --- ESTAT DEL JOC ---
+        // Inicialització variables globals (substituint les antigues)
+
+        // --- ESTAT DEL JOC ---
+        let target = 0;
+        let numbers = [];
+        let historyStack = [];
+        let stepsLog = [];
+        let selectedId = null;
+        let selectedOp = null;
+        let isSolved = false;
+        let isGameOver = false;
+        let timerInterval = null;
+        let lastKnownTimeLeft = -1;
+
+        let pendingConfirmValue = 0;
+
+        // Variables per doble clic
+        let lastClickId = null;
+        let lastClickTime = 0;
+
+        // --- FIREBASE LISTENERS ---
+        // Monitoritzar el PIN: si desapareix (reset total), tornem al login
+        database.ref('pin').on('value', function (snap) {
+            const pinVal = snap.val();
+            // Si el PIN desapareix de Firebase i estem DINS (el login-screen s'ha amagat amb -translate-y-full)
+            if (!pinVal && document.getElementById('login-screen').classList.contains('-translate-y-full')) {
+                alert("La sala ha estat tancada per l'administrador.");
+                location.reload();
+            }
+        });
+
+        database.ref('partida').on('value', function (snapshot) {
+            handlePartidaUpdate(snapshot.val());
+        });
+
+        function handlePartidaUpdate(data) {
+            if (!data) data = {};
+            var waitTitle = document.getElementById('wait-title');
+            var waitScreen = document.getElementById('wait-screen');
+            var specScreen = document.getElementById('spectator-screen');
+            var gameUI = document.getElementById('game-ui');
+
+            // Lògica de Duelistes (Mode Batalla)
+            var isSpectator = false;
+            if (gameConfig.mode === 'batalla' && data.fase) {
+                var duelistes = data.duelistes || {};
+                var isDuelist = (duelistes.a === playerData.id || duelistes.b === playerData.id);
+                if (playerData.id && !isDuelist) isSpectator = true;
+            }
+
+            // GESTIÓ DE PANTALLES CENTRALITZADA
+            if (data.fase === 'JUGANT') {
+                if (!playerData.id) return; // Si no hem fet login, ens quedem on som
+
+                if (isSpectator) {
+                    if (specScreen) specScreen.classList.remove('hidden');
+                    updateSpectatorInfo();
+                    if (waitScreen) waitScreen.classList.add('hidden');
+                    if (gameUI) gameUI.classList.add('hidden');
+                } else {
+                    if (specScreen) specScreen.classList.add('hidden');
+                    if (waitScreen) waitScreen.classList.add('hidden');
+                    if (gameUI) gameUI.classList.remove('hidden');
+                    if (target !== data.objectiu) initGame(data.numeros, data.objectiu);
+                }
+            } else if (data.fase === 'PREPARAT') {
+                if (specScreen) specScreen.classList.add('hidden');
+                if (gameUI) gameUI.classList.add('hidden');
+                if (waitScreen) waitScreen.classList.remove('hidden');
+                if (waitTitle) {
+                    waitTitle.textContent = "⚠️ ATENCIÓ... ⚠️";
+                    waitTitle.className = "text-4xl font-black text-yellow-500 mb-2 text-center animate-pulse";
+                }
+            } else {
+                // RESET / ESPERA
+                if (specScreen) specScreen.classList.add('hidden');
+                if (gameUI) gameUI.classList.add('hidden');
+                if (waitScreen) waitScreen.classList.remove('hidden');
+                var gameOver = document.getElementById('game-over-overlay');
+                var sentOverlay = document.getElementById('sent-overlay');
+                if (gameOver) gameOver.classList.add('hidden');
+                if (sentOverlay) sentOverlay.classList.add('hidden');
+                if (waitTitle) {
+                    waitTitle.textContent = "Esperant a generar una nova partida";
+                    waitTitle.className = "text-3xl font-bold text-white mb-2 text-center";
+                }
+            }
+
+            // Control de temps
+            if (data.fase === 'JUGANT' && data.timestamp_inici) {
+                syncTimer(data.timestamp_inici);
+            } else {
+                if (timerInterval) clearInterval(timerInterval);
+                var bar = document.getElementById('timer-bar');
+                if (bar) bar.style.width = '100%';
+                var timerText = document.getElementById('countdown-text-player');
+                if (timerText) timerText.innerText = '--s';
+            }
+        }
+
+        function updateSpectatorInfo() {
+            const teamName = document.getElementById('spectator-team-name');
+            const teamColor = document.getElementById('spectator-team-color');
+            if (playerData.equip === '1') {
+                teamName.innerText = gameConfig.team1.name;
+                teamName.style.color = gameConfig.team1.color;
+                teamColor.style.backgroundColor = gameConfig.team1.color;
+            } else {
+                teamName.innerText = gameConfig.team2.name;
+                teamName.style.color = gameConfig.team2.color;
+                teamColor.style.backgroundColor = gameConfig.team2.color;
+            }
+        }
+
+        function syncTimer(startTime) {
+            if (timerInterval) clearInterval(timerInterval);
+
+            const bar = document.getElementById('timer-bar');
+            const text = document.getElementById('countdown-text-player');
+            const total = 45;
+
+            timerInterval = setInterval(() => {
+                const now = Date.now();
+                const diff = total - Math.floor((now - startTime) / 1000);
+                const pct = (diff / total) * 100;
+
+                bar.style.width = Math.max(0, pct) + '%';
+
+                if (diff !== lastKnownTimeLeft) {
+                    if (diff >= 0) {
+                        text.innerText = diff + 's';
+                        if (diff <= 5) {
+                            if (diff > 0) playSound('tick');
+                            text.className = "mt-3 text-4xl font-black text-red-500 tabular-nums font-mono border-2 border-red-500 rounded-xl px-5 py-2 bg-red-500/20 shadow-[0_0_30px_rgba(239,68,68,0.3)] inline-block animate-pulse";
+                            bar.className = "h-full bg-red-600 progress-bar";
+                        } else if (diff <= 10) {
+                            text.className = "mt-3 text-3xl font-black text-red-400 tabular-nums font-mono border-2 border-red-500/50 rounded-xl px-4 py-1 bg-red-500/10 inline-block";
+                            bar.className = "h-full bg-red-500 progress-bar";
+                        } else {
+                            text.className = "mt-3 text-2xl font-black text-white tabular-nums font-mono border-2 border-red-500/30 rounded-xl px-4 py-1 bg-red-500/5 inline-block";
+                            bar.className = "h-full bg-red-500 progress-bar";
+                        }
+                    }
+
+                    if (diff === 0 && lastKnownTimeLeft > 0) {
+                        playSound('end');
+                        endGame();
+                    }
+
+                    lastKnownTimeLeft = diff;
+                }
+
+                if (diff < 0) {
+                    text.innerText = "FI DEL TEMPS";
+                    text.className = "mt-3 text-xl font-black text-red-600 tabular-nums font-mono border-2 border-red-600 rounded-xl px-4 py-1 bg-red-600/10 inline-block";
+                    clearInterval(timerInterval);
+                }
+            }, 100);
+        }
+
+        // --- INICIALITZACIÓ ---
+        function initGame(remoteNumbers, remoteTarget) {
+            isGameOver = false;
+            isSolved = false;
+
+            // Netejar overlays
+            document.getElementById('game-over-overlay').classList.add('hidden');
+            document.getElementById('sent-overlay').classList.add('hidden');
+            document.getElementById('confirmation-modal').classList.add('hidden');
+            document.getElementById('game-board-area').classList.remove('game-disabled');
+
+            target = remoteTarget;
+
+            numbers = [];
+            for (var m = 0; m < remoteNumbers.length; m++) {
+                numbers.push({
+                    id: m,
+                    value: remoteNumbers[m],
+                    used: false,
+                    isGenerated: false
+                });
+            }
+
+            historyStack = [];
+            stepsLog = [];
+            selectedId = null;
+            selectedOp = null;
+
+            render();
+        }
+
+        function endGame() {
+            isGameOver = true;
+            document.getElementById('game-over-overlay').classList.remove('hidden');
+            document.getElementById('confirmation-modal').classList.add('hidden');
+            renderControls();
+        }
+
+        // --- RENDERITZAT (Idèntic a l'original) ---
+        function render() {
+            document.getElementById('target-number').textContent = target;
+
+            // Calcular millor aproximació
+            var currentBest = 0;
+            var minDiff = 999999;
+            for (var nIdx = 0; nIdx < numbers.length; nIdx++) {
+                var numObj = numbers[nIdx];
+                if (!numObj.used) {
+                    var d = Math.abs(numObj.value - target);
+                    if (d < minDiff) {
+                        minDiff = d;
+                        currentBest = numObj.value;
+                    }
+                }
+            }
+            var diff = Math.abs(target - currentBest);
+
+            var statusEl = document.getElementById('status-message');
+            if (diff === 0) {
+                statusEl.innerHTML = "<span>OBJECTIU!</span>";
+                statusEl.className = "mt-2 px-3 py-1 rounded-full font-bold text-xs bg-green-900 text-green-100 border border-green-700 transition-all flex items-center gap-2";
+            } else {
+                statusEl.textContent = "Aprox: " + currentBest + " (Diff: " + diff + ")";
+                statusEl.className = "mt-2 px-3 py-1 rounded-full font-bold text-xs bg-slate-900 text-slate-400 border border-slate-700 transition-all";
+            }
+
+            renderBoard();
+            renderControls();
+            renderHistory();
+        }
+
+        function renderBoard() {
+            var gridInitial = document.getElementById('initial-numbers-grid');
+            var gridGenerated = document.getElementById('generated-numbers-grid');
+            gridInitial.innerHTML = '';
+            gridGenerated.innerHTML = '';
+
+            var activeSlotIndex = 1;
+
+            for (var i = 0; i < numbers.length; i++) {
+                var num = numbers[i];
+                var el = document.createElement('div');
+                var classes = "number-tile relative aspect-[3/4] w-14 sm:w-20 md:w-24 rounded-lg sm:rounded-xl flex items-center justify-center text-xl sm:text-4xl font-black shadow-lg cursor-pointer select-none border-2 ";
+
+                var baseBg = "bg-slate-200";
+                var baseText = "text-slate-900";
+                var baseBorder = "border-slate-300";
+
+                if (num.isGenerated) {
+                    baseBg = "bg-red-100";
+                    baseText = "text-red-700";
+                    baseBorder = "border-red-300";
+                }
+
+                if (num.used) {
+                    classes += "bg-slate-800 text-slate-600 scale-90 opacity-40 cursor-default border-transparent";
+                } else {
+                    if (selectedId === num.id) {
+                        classes += "bg-red-600 text-white -translate-y-1 border-red-400 shadow-[0_0_15px_rgba(220,38,38,0.5)] z-10";
+                    } else {
+                        classes += baseBg + " " + baseText + " hover:-translate-y-1 hover:shadow-xl " + baseBorder;
+                    }
+
+                    var hint = document.createElement('span');
+                    hint.className = "key-hint";
+                    hint.textContent = activeSlotIndex <= 9 ? activeSlotIndex : '';
+                    el.appendChild(hint);
+                    activeSlotIndex++;
+                }
+
+                el.className = classes;
+                el.appendChild(document.createTextNode(num.value));
+
+                if (!num.used && !isSolved && !isGameOver) {
+                    (function (id) {
+                        el.onclick = function () { handleNumberClick(id); };
+                    })(num.id);
+                }
+
+                if (num.isGenerated) gridGenerated.appendChild(el);
+                else gridInitial.appendChild(el);
+            }
+        }
+
+        function renderControls() {
+            var btns = document.querySelectorAll('.op-btn');
+            for (var i = 0; i < btns.length; i++) {
+                var btn = btns[i];
+                var op = btn.getAttribute('data-key');
+                if (selectedOp === op) {
+                    btn.className = "op-btn w-12 h-12 sm:w-14 sm:h-14 rounded-lg text-2xl font-bold flex items-center justify-center bg-red-600 text-white scale-110 shadow-lg ring-2 ring-red-400 transition-all";
+                } else {
+                    btn.className = "op-btn w-12 h-12 sm:w-14 sm:h-14 rounded-lg text-2xl font-bold flex items-center justify-center bg-slate-700 text-slate-300 hover:bg-slate-600 border border-slate-600 transition-all disabled:opacity-30 disabled:cursor-not-allowed";
+                }
+                btn.disabled = (selectedId === null || isSolved || isGameOver);
+            }
+
+            document.getElementById('btn-undo').disabled = historyStack.length === 0 || isSolved || isGameOver;
+            document.getElementById('btn-submit').disabled = isSolved || isGameOver;
+        }
+
+        function renderHistory() {
+            var list = document.getElementById('history-list');
+            list.innerHTML = '';
+            if (stepsLog.length === 0) {
+                list.innerHTML = '<p class="text-slate-600 italic text-xs text-center py-4">Fes operacions.</p>';
+                return;
+            }
+            for (var i = 0; i < stepsLog.length; i++) {
+                var step = stepsLog[i];
+                var row = document.createElement('div');
+                row.className = "flex justify-between items-center text-sm sm:text-base font-mono font-medium text-slate-300 bg-slate-800 p-2 rounded fade-in border border-slate-700";
+                row.innerHTML = "<span>" + step + "</span><span class='text-[10px] text-slate-500'>#" + (i + 1) + "</span>";
+                list.appendChild(row);
+            }
+            list.scrollTop = list.scrollHeight;
+        }
+
+        // --- LÒGICA DE JOC ---
+        function handleNumberClick(id) {
+            if (isSolved || isGameOver) return;
+
+            var now = Date.now();
+            if (id === lastClickId && (now - lastClickTime) < 300) {
+                var num = null;
+                for (var i = 0; i < numbers.length; i++) {
+                    if (numbers[i].id === id) {
+                        num = numbers[i];
+                        break;
+                    }
+                }
+                if (num && !num.used) {
+                    openConfirmation(num.value);
+                    return;
+                }
+            }
+            lastClickId = id;
+            lastClickTime = now;
+
+            if (selectedId === null) {
+                selectedId = id;
+            } else if (selectedId === id) {
+                selectedId = null;
+                selectedOp = null;
+            } else {
+                if (selectedOp) {
+                    var valA = 0;
+                    var valB = 0;
+                    for (var j = 0; j < numbers.length; j++) {
+                        if (numbers[j].id === selectedId) valA = numbers[j].value;
+                        if (numbers[j].id === id) valB = numbers[j].value;
+                    }
+                    executeOperation(valA, valB, selectedOp, selectedId, id);
+                } else {
+                    selectedId = id;
+                }
+            }
+            render();
+        }
+
+        function selectOp(op) {
+            if (selectedId === null || isSolved || isGameOver) return;
+            selectedOp = op;
+            render();
+        }
+
+        function executeOperation(valA, valB, op, idA, idB) {
+            var res;
+            if (op === '/' && (valB === 0 || valA % valB !== 0)) return alert("Divisió no exacta");
+            if (op === '-' && valA - valB <= 0) return alert("Resultat no positiu");
+
+            switch (op) {
+                case '+': res = valA + valB; break;
+                case '-': res = valA - valB; break;
+                case '*': res = valA * valB; break;
+                case '/': res = valA / valB; break;
+                default: res = 0;
+            }
+
+            historyStack.push({
+                numbers: JSON.parse(JSON.stringify(numbers)),
+                steps: stepsLog.slice()
+            });
+
+            numbers = numbers.map(function (n) {
+                if (n.id === idA || n.id === idB) {
+                    var newN = JSON.parse(JSON.stringify(n));
+                    newN.used = true;
+                    return newN;
+                }
+                return n;
+            });
+
+            var maxId = 0;
+            for (var k = 0; k < numbers.length; k++) {
+                if (numbers[k].id > maxId) maxId = numbers[k].id;
+            }
+            var newId = maxId + 1;
+            numbers.push({ id: newId, value: res, used: false, isGenerated: true });
+
+            var symbol = op === '*' ? '×' : op === '/' ? '÷' : op;
+            stepsLog.push(valA + " " + symbol + " " + valB + " = <span class='text-red-400 font-bold'>" + res + "</span>");
+
+            selectedId = null;
+            selectedOp = null;
+            render();
+        }
+
+        function undo() {
+            if (historyStack.length === 0 || isSolved || isGameOver) return;
+            var lastState = historyStack.pop();
+            numbers = lastState.numbers;
+            stepsLog = lastState.steps;
+            selectedId = null;
+            selectedOp = null;
+            render();
+        }
+
+        // --- SUBMISSION LOGIC ---
+        function confirmResult() {
+            // Nou comportament: Enviar el número seleccionat manualment
+            if (selectedId === null) {
+                alert("Primer selecciona el número (fitxa) que vols enviar.");
+                return;
+            }
+
+            var num = null;
+            for (var l = 0; l < numbers.length; l++) {
+                if (numbers[l].id === selectedId) {
+                    num = numbers[l];
+                    break;
+                }
+            }
+            if (num) {
+                openConfirmation(num.value);
+            }
+        }
+
+        function openConfirmation(value) {
+            pendingConfirmValue = value;
+            document.getElementById('confirm-value-display').textContent = value;
+            document.getElementById('confirmation-modal').classList.remove('hidden');
+        }
+
+        function closeConfirmation() {
+            document.getElementById('confirmation-modal').classList.add('hidden');
+            pendingConfirmValue = 0;
+        }
+
+        function sendToFirebase() {
+            if (isSolved || isGameOver) {
+                if (isGameOver) alert("El temps s'ha esgotat! No pots enviar la solució.");
+                closeConfirmation();
+                return;
+            }
+            var valueToSend = pendingConfirmValue; // Guardem el valor abans de tancar
+            isSolved = true; // Bloqueja el joc local
+            closeConfirmation(); // Això posa pendingConfirmValue a 0, per això necessitem la variable
+            document.getElementById('sent-overlay').classList.remove('hidden');
+            playSound('victory');
+
+            // Enviem a Firebase
+            database.ref('respostes/' + playerData.id).set({
+                nom: playerData.name,
+                avatar: playerData.avatar,
+                equip: playerData.equip,
+                valor: valueToSend, // Usem la variable guardada
+                passos: stepsLog,
+                timestamp: Date.now()
+            });
+        }
+
+    </script>
+</body>
+
+</html>
