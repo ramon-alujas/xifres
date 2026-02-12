@@ -7,6 +7,7 @@
     <!-- Firebase -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="firebase_config.js"></script>
     <!-- Tailwind -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -346,13 +347,110 @@
 
     </div>
 
+    <!-- LOGIN OVERLAY -->
+    <div id="login-overlay" class="fixed inset-0 z-[200] bg-slate-950 flex flex-col items-center justify-center p-4">
+        <div class="max-w-xs w-full card p-6 shadow-2xl border-red-900/50 flex flex-col gap-4">
+            <h2 class="text-xl font-black text-center text-white">ACCÉS <span class="text-red-500">ADMIN</span></h2>
+            <input type="email" id="admin-email" placeholder="Email"
+                class="bg-slate-900 border border-slate-700 rounded p-2 text-white outline-none focus:border-red-500">
+            <input type="password" id="admin-password" placeholder="Contrasenya"
+                class="bg-slate-900 border border-slate-700 rounded p-2 text-white outline-none focus:border-red-500">
+            <button onclick="loginAdmin()"
+                class="bg-red-600 hover:bg-red-500 text-white font-bold py-2 rounded transition-colors">
+                ENTRAR
+            </button>
+            <p id="login-error" class="text-red-500 text-xs text-center hidden"></p>
+        </div>
+    </div>
+
     <!-- SCRIPTS -->
     <script>
+        // --- AUTH ---
+        // Referència a Auth
+        const auth = firebase.auth();
+
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                document.getElementById('login-overlay').classList.add('hidden');
+                initAdminListeners();
+            } else {
+                document.getElementById('login-overlay').classList.remove('hidden');
+            }
+        });
+
+        function loginAdmin() {
+            const e = document.getElementById('admin-email').value;
+            const p = document.getElementById('admin-password').value;
+            auth.signInWithEmailAndPassword(e, p).catch(error => {
+                const errEl = document.getElementById('login-error');
+                errEl.innerText = error.message;
+                errEl.classList.remove('hidden');
+            });
+        }
+
+        async function tancarAdmin() {
+            if (!confirm("Vols TANCAR l'administració?")) return;
+            if (confirm("⚠️ Vols fer un RESET TOTAL (Esborrar jugadors i dades) abans de marxar?")) {
+                await database.ref().update({ jugadors: null, solicituds: null, respostes: null, partida: null, pin: null, config: null, punts: null });
+            }
+            auth.signOut();
+            window.close();
+        }
+
         // --- DATA ---
         let gameConfig = { mode: 'lliure', team1: { name: 'E1', color: '#3b82f6' }, team2: { name: 'E2', color: '#ef4444' } };
         let duelistes = { a: null, b: null };
         let timerInterval = null;
         let teamPoints = { team1: 0, team2: 0 };
+
+        // --- LISTENERS (Only active when logged in) ---
+        function initAdminListeners() {
+            database.ref('pin').on('value', s => {
+                const val = s.val();
+                document.getElementById('pin-display').innerText = val ? `PIN: ${val}` : "PIN: ----";
+            });
+            database.ref('config').on('value', s => { if (s.val()) { gameConfig = s.val(); syncUI(); } });
+
+            database.ref('partida').on('value', s => {
+                const d = s.val();
+                const tEl = document.getElementById('admin-timer'), oEl = document.getElementById('prev-target'), nEl = document.getElementById('prev-numbers');
+                if (!d) { clearInterval(timerInterval); oEl.textContent = '---'; nEl.innerHTML = '<span class="text-slate-700 text-xs italic">Buit...</span>'; tEl.innerText = '---'; tEl.className = "text-6xl text-slate-700"; return; }
+                oEl.textContent = d.objectiu;
+                nEl.innerHTML = d.numeros.map(n => `<div class="bg-slate-800 w-10 h-10 flex items-center justify-center rounded border border-slate-700 font-bold">${n}</div>`).join('');
+                if (d.fase === 'JUGANT') startTimer(d.timestamp_inici); else { clearInterval(timerInterval); tEl.innerText = '--'; }
+            });
+
+            database.ref('solicituds').on('value', s => {
+                const list = document.getElementById('pending-list'), data = s.val();
+                list.innerHTML = '';
+                if (!data) { list.innerHTML = '<div class="text-center py-2 text-slate-700 text-[9px]">Cap...</div>'; document.getElementById('pending-count').innerText = 0; return; }
+                const entries = Object.entries(data);
+                document.getElementById('pending-count').innerText = entries.length;
+                entries.forEach(([k, v]) => {
+                    const div = document.createElement('div');
+                    div.className = "flex justify-between items-center bg-slate-900/50 p-1.5 rounded border border-slate-800";
+                    div.innerHTML = `<span class="text-xs">${v.avatar} ${v.nom}</span><div class="flex gap-1"><button onclick="rejectPlayer('${k}')" class="bg-red-900 px-2 rounded text-[10px]">✕</button><button onclick="acceptPlayer('${k}','${v.nom}','${v.avatar}','${v.equip || ''}')" class="bg-green-700 px-2 rounded text-[10px]">OK</button></div>`;
+                    list.appendChild(div);
+                });
+            });
+
+            database.ref('jugadors').on('value', s => {
+                lastPlayersData = s.val();
+                renderPlayers(lastPlayersData);
+            });
+
+            database.ref('respostes').on('value', s => {
+                lastResponsesData = s.val();
+                renderResponses(lastResponsesData);
+            });
+
+            database.ref('punts').on('value', s => {
+                const val = s.val() || { team1: 0, team2: 0 };
+                teamPoints = { team1: val.team1 || 0, team2: val.team2 || 0 };
+                document.getElementById('admin-score-team1').innerText = teamPoints.team1;
+                document.getElementById('admin-score-team2').innerText = teamPoints.team2;
+            });
+        }
 
         // --- MODES ---
         function setMode(m) {
@@ -471,32 +569,7 @@
         function netjarRespostes() { if (confirm("Esborrar?")) database.ref('respostes').remove(); }
 
         // --- MARCADOR ---
-        database.ref('punts').on('value', s => {
-            const val = s.val() || { team1: 0, team2: 0 };
-            teamPoints = {
-                team1: val.team1 || 0,
-                team2: val.team2 || 0
-            };
-            document.getElementById('admin-score-team1').innerText = teamPoints.team1;
-            document.getElementById('admin-score-team2').innerText = teamPoints.team2;
-        });
         function changeScore(t, d) { database.ref(`punts/${t}`).set(Math.max(0, (teamPoints[t] || 0) + d)); }
-
-        // --- LISTENERS ---
-        database.ref('pin').on('value', s => {
-            const val = s.val();
-            document.getElementById('pin-display').innerText = val ? `PIN: ${val}` : "PIN: ----";
-        });
-        database.ref('config').on('value', s => { if (s.val()) { gameConfig = s.val(); syncUI(); } });
-
-        database.ref('partida').on('value', s => {
-            const d = s.val();
-            const tEl = document.getElementById('admin-timer'), oEl = document.getElementById('prev-target'), nEl = document.getElementById('prev-numbers');
-            if (!d) { clearInterval(timerInterval); oEl.textContent = '---'; nEl.innerHTML = '<span class="text-slate-700 text-xs italic">Buit...</span>'; tEl.innerText = '---'; tEl.className = "text-6xl text-slate-700"; return; }
-            oEl.textContent = d.objectiu;
-            nEl.innerHTML = d.numeros.map(n => `<div class="bg-slate-800 w-10 h-10 flex items-center justify-center rounded border border-slate-700 font-bold">${n}</div>`).join('');
-            if (d.fase === 'JUGANT') startTimer(d.timestamp_inici); else { clearInterval(timerInterval); tEl.innerText = '--'; }
-        });
 
         function startTimer(s) {
             clearInterval(timerInterval);
@@ -508,28 +581,9 @@
             }, 1000);
         }
 
-        database.ref('solicituds').on('value', s => {
-            const list = document.getElementById('pending-list'), data = s.val();
-            list.innerHTML = '';
-            if (!data) { list.innerHTML = '<div class="text-center py-2 text-slate-700 text-[9px]">Cap...</div>'; document.getElementById('pending-count').innerText = 0; return; }
-            const entries = Object.entries(data);
-            document.getElementById('pending-count').innerText = entries.length;
-            entries.forEach(([k, v]) => {
-                const div = document.createElement('div');
-                div.className = "flex justify-between items-center bg-slate-900/50 p-1.5 rounded border border-slate-800";
-                div.innerHTML = `<span class="text-xs">${v.avatar} ${v.nom}</span><div class="flex gap-1"><button onclick="rejectPlayer('${k}')" class="bg-red-900 px-2 rounded text-[10px]">✕</button><button onclick="acceptPlayer('${k}','${v.nom}','${v.avatar}','${v.equip || ''}')" class="bg-green-700 px-2 rounded text-[10px]">OK</button></div>`;
-                list.appendChild(div);
-            });
-        });
-
         function rejectPlayer(id) { database.ref(`solicituds/${id}`).remove(); }
         function acceptPlayer(id, nom, avatar, equip) { database.ref().update({ [`solicituds/${id}`]: null, [`jugadors/${id}`]: { nom, avatar, equip, joinedAt: Date.now() } }); }
         function kickPlayer(id) { if (confirm("Expulsar?")) database.ref(`jugadors/${id}`).remove(); }
-
-        database.ref('jugadors').on('value', s => {
-            lastPlayersData = s.val();
-            renderPlayers(lastPlayersData);
-        });
 
         function renderPlayers(data) {
             const f = document.getElementById('active-list'), a = document.getElementById('team-a-list'), b = document.getElementById('team-b-list');
@@ -563,11 +617,6 @@
         function allowDrop(e) { e.preventDefault(); }
         function dropPlayer(e, t) { e.preventDefault(); if (gameConfig.mode !== 'batalla') return; const id = e.dataTransfer.getData("text"); if (id) database.ref(`jugadors/${id}`).update({ equip: t }); }
 
-        database.ref('respostes').on('value', s => {
-            lastResponsesData = s.val();
-            renderResponses(lastResponsesData);
-        });
-
         function renderResponses(data) {
             const sing = document.getElementById('responses-list-single'), ra = document.getElementById('responses-team-a'), rb = document.getElementById('responses-team-b');
             if (sing) sing.innerHTML = ''; if (ra) ra.innerHTML = ''; if (rb) rb.innerHTML = '';
@@ -584,32 +633,6 @@
                     else { if (rb) rb.appendChild(div); }
                 } else if (sing) sing.appendChild(div);
             });
-        }
-
-        async function tancarAdmin() {
-            if (!confirm("Vols TANCAR l'administració?")) return;
-
-            if (confirm("⚠️ Vols fer un RESET TOTAL (Esborrar jugadors i dades) abans de marxar?")) {
-                await database.ref().update({
-                    jugadors: null,
-                    solicituds: null,
-                    respostes: null,
-                    partida: null,
-                    pin: null,
-                    config: null,
-                    punts: null
-                });
-            }
-
-            window.onbeforeunload = null;
-            window.close();
-            document.body.innerHTML = `
-                <div class="h-screen w-screen flex flex-col items-center justify-center bg-slate-950 text-slate-300">
-                    <div class="text-6xl mb-4">👋</div>
-                    <h1 class="text-3xl font-bold text-white mb-2">Sessió Finalitzada</h1>
-                    <p>Ja pots tancar aquesta pestanya.</p>
-                </div>
-            `;
         }
 
         window.onbeforeunload = function (e) {
