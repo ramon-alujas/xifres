@@ -8,6 +8,7 @@
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <!-- Config -->
     <script src="firebase_config.js"></script>
     <!-- Tailwind -->
@@ -525,6 +526,35 @@
         var playerData = { name: '', avatar: '🦁', id: '', equip: '' };
         var gameConfig = { mode: 'lliure' };
 
+        // --- AUTH ---
+        firebase.auth().signInAnonymously().catch((error) => {
+            console.error("Error signing in anonymously:", error);
+            alert("Error de connexió (Auth): " + error.message);
+        });
+
+        firebase.auth().onAuthStateChanged((user) => {
+            if (user) {
+                // Use Firebase UID as player ID for security rules
+                playerData.id = user.uid;
+
+                // Comprovem si ja tenim dades locals
+                var storedPlayer = localStorage.getItem('xifres_player_data');
+                if (storedPlayer) {
+                    var stored = JSON.parse(storedPlayer);
+                    playerData.name = stored.name;
+                    playerData.avatar = stored.avatar;
+                    // No sobreescrivim playerData.id amb el stored, usem l'actual de Auth per seguretat
+                    document.getElementById('input-name').value = playerData.name;
+                    document.getElementById('input-avatar').value = playerData.avatar;
+                    selectAvatar(playerData.avatar);
+                }
+
+                console.log("Connectat com:", user.uid);
+            } else {
+                console.log("Desconnectat");
+            }
+        });
+
         // Escolta la config per saber si demanar equip
         database.ref('config').on('value', function (snap) {
             var val = snap.val();
@@ -553,21 +583,6 @@
             playSound('click');
         }
 
-        // Comprovem si ja tenim dades
-        var storedPlayer = localStorage.getItem('xifres_player_data');
-        if (storedPlayer) {
-            var stored = JSON.parse(storedPlayer);
-            playerData.name = stored.name;
-            playerData.avatar = stored.avatar;
-            playerData.id = stored.id;
-            document.getElementById('input-name').value = playerData.name;
-            document.getElementById('input-avatar').value = playerData.avatar;
-        }
-
-        if (!playerData.id) {
-            playerData.id = 'user_' + Date.now() + Math.floor(Math.random() * 1000);
-        }
-
         function selectAvatar(av) {
             var avatars = document.querySelectorAll('.avatar-btn');
             for (var i = 0; i < avatars.length; i++) {
@@ -588,9 +603,7 @@
         }
 
         window.addEventListener('DOMContentLoaded', function () {
-            var stored = localStorage.getItem('xifres_player_data');
-            var initialAvatar = stored ? JSON.parse(stored).avatar : '🦁';
-            selectAvatar(initialAvatar);
+            // Inicialització visual si cal
         });
 
         function login() {
@@ -603,6 +616,9 @@
             if (!pin) return alert("Necessites el PIN de la sala!");
             if (gameConfig.mode === 'batalla' && !equip) return alert("Has de triar un equip!");
 
+            // Assegurar que tenim UID
+            if (!playerData.id) return alert("Encara connectant amb el servidor... torna-ho a provar en un segon.");
+
             database.ref('pin').once('value').then(function (snap) {
                 var serverPin = snap.val();
                 if (!serverPin) return alert("NO HI HA CAP PARTIDA ACTIVA.");
@@ -611,7 +627,8 @@
                 playerData.name = name;
                 playerData.avatar = avatar;
                 playerData.equip = equip;
-                localStorage.setItem('xifres_player_data', JSON.stringify(playerData));
+                // Guardem només dades no crítiques en localstorage per comoditat
+                localStorage.setItem('xifres_player_data', JSON.stringify({ name: name, avatar: avatar }));
 
                 database.ref('solicituds/' + playerData.id).set({
                     nom: name,
@@ -1155,6 +1172,5 @@
 
     </script>
 </body>
-
 
 </html>
